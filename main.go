@@ -23,7 +23,6 @@ func main() {
 		}
 	}()
 
-	fmt.Println("1.WFP session successfully created")
 	baseObjects, err := firewall.RegisterBaseObjects(session)
 	if err != nil {
 		log.Fatalf("Failed to register base objects: %v", err)

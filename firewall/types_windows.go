@@ -400,6 +400,22 @@ type wtFwpmProvider0 struct {
 
 type wtIPProto uint32
 
+// Define SEC_WINNT_AUTH_IDENTITY_W to replace windows.AuthIdentity
+type SecWinNTAuthIdentityW struct {
+	User           *uint16
+	UserLength     uint32
+	Domain         *uint16
+	DomainLength   uint32
+	Password       *uint16
+	PasswordLength uint32
+	Flags          uint32
+}
+
+type baseObjects struct {
+	provider windows.GUID
+	filters  windows.GUID
+}
+
 const (
 	cIPPROTO_ICMP   wtIPProto = 1
 	cIPPROTO_ICMPV6 wtIPProto = 58

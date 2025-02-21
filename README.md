@@ -1,6 +1,6 @@
 # Windows Filtering Platform Custom Implementation Guide
 
-## Introduction
+**ATTENTION: the project is currently immature and still allows for little management of possible applicable rules in WFP**
 
 This document describes a custom implementation of the Windows Filtering Platform (WFP), designed to provide fine-grained control over network traffic at the system level. The implementation enables precise management of network filtering rules while seamlessly integrating with existing network security solutions.
 
@@ -16,36 +16,12 @@ Network filtering rules process addresses using CIDR notation, converting networ
 
 ## Technical Implementation Details
 
-### Session Management
 The system implements session management through a custom structure that encapsulates the WFP session handle and related configuration. Sessions are created with the FWPM_SESSION_FLAG_DYNAMIC flag, allowing for dynamic updates to filtering rules without requiring system restarts.
 
 ### Provider and Sublayer Registration
 The provider registration process generates unique GUIDs for both the provider and its sublayer. The sublayer is registered with maximum weight (^uint16(0)) to ensure proper positioning in the filtering hierarchy. This setup enables the system to maintain priority over other filtering solutions when necessary.
 
-### Network Address Handling
-Network addresses are processed using a custom structure that holds both the address and netmask in uint32 format. The implementation includes:
-```go
-addrMask := struct {
-    addr uint32
-    mask uint32
-}{
-    addr: binary.BigEndian.Uint32(addr[:]),
-    mask: mask,
-}
-```
+**This file will be updated with more details soon**
 
-### Filter Creation
-Filters are created with specific conditions that match against remote IP addresses. The system supports both permit and block rules, with the ability to set:
-- Filter weight for priority management
-- Hard and soft permit/block capabilities through FWPM_FILTER_FLAG_CLEAR_ACTION_RIGHT
-- Specific layer targeting (e.g., FWPM_LAYER_ALE_AUTH_CONNECT_V4)
-- Custom conditions for IP address matching
 
-## Applications and Use Cases
-
-The system is particularly effective in scenarios requiring precise network traffic control. It can create custom routing rules, implement application-specific network policies, and manage complex filtering scenarios. The implementation supports:
-- Custom routing rules for specific network ranges
-- Application-specific network access controls
-- Integration with existing network security solutions
-- Dynamic rule updates without system restarts
 

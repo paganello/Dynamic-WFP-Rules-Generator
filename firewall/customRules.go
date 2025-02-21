@@ -10,31 +10,6 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// Definizione della struttura SEC_WINNT_AUTH_IDENTITY_W per sostituire windows.AuthIdentity
-type SecWinNTAuthIdentityW struct {
-	User           *uint16
-	UserLength     uint32
-	Domain         *uint16
-	DomainLength   uint32
-	Password       *uint16
-	PasswordLength uint32
-	Flags          uint32
-}
-
-type wfpObjectInstaller func(uintptr) error
-
-type wtFwpmConditionValue0 struct {
-	_type uint32
-	value uintptr
-}
-
-type baseObjects struct {
-	provider windows.GUID
-	filters  windows.GUID
-}
-
-var wfpSession uintptr
-
 func CreateWfpSession() (uintptr, error) {
 	sessionDisplayData, err := createWtFwpmDisplayData0("CustomWireGuardSession", "Custom WireGuard dynamic session")
 	if err != nil {
@@ -73,7 +48,7 @@ func RegisterBaseObjects(session uintptr) (*baseObjects, error) {
 	// Register provider.
 	//
 	{
-		displayData, err := createWtFwpmDisplayData0("WireShield", "custom WireGuard provider")
+		displayData, err := createWtFwpmDisplayData0("CustomRouleGenerator", "CustomRouleGenerator provider")
 		if err != nil {
 			return nil, wrapErr(err)
 		}
@@ -84,7 +59,6 @@ func RegisterBaseObjects(session uintptr) (*baseObjects, error) {
 
 		err = fwpmProviderAdd0(session, &provider, 0)
 		if err != nil {
-			// TODO: cleanup entire call chain of these if failure?
 			return nil, wrapErr(err)
 		}
 	}
@@ -93,7 +67,7 @@ func RegisterBaseObjects(session uintptr) (*baseObjects, error) {
 	// Register filters sublayer.
 	//
 	{
-		displayData, err := createWtFwpmDisplayData0("Wireshield filters", "Permissive and blocking filters")
+		displayData, err := createWtFwpmDisplayData0("CustomRouleGenerator filters", "Permissive and blocking filters")
 		if err != nil {
 			return nil, wrapErr(err)
 		}
@@ -118,19 +92,18 @@ func PermitNetwork(session uintptr, baseObjects *baseObjects, weight uint8, netw
 		return wrapErr(err)
 	}
 
-	// Convertire l'indirizzo IP e la maschera in formato uint32
+	// Convert the IP address and Mask to a 4-byte array
 	addr := ipNet.Addr().As4()
-	mask := ipNetMaskToUint32(ipNet)
+	mask := net.CIDRMask(ipNet.Bits(), 32) // e.g.: 255.255.255.0 if ipNet.Bits() = 24
 
+	// Convert the IP address and Mask to UINT32
 	addrMask := struct {
 		addr uint32
 		mask uint32
 	}{
 		addr: binary.BigEndian.Uint32(addr[:]),
-		mask: mask,
+		mask: binary.BigEndian.Uint32(mask),
 	}
-
-	fmt.Println(uintptr(unsafe.Pointer(&addrMask)))
 
 	conditions := make([]wtFwpmFilterCondition0, 1)
 	conditions[0].fieldKey = cFWPM_CONDITION_IP_REMOTE_ADDRESS
@@ -143,7 +116,8 @@ func PermitNetwork(session uintptr, baseObjects *baseObjects, weight uint8, netw
 		return wrapErr(err)
 	}
 
-	displayData, err := createWtFwpmDisplayData0("Permit traffic to 10.0.0.0/24", "")
+	displayName := fmt.Sprintf("Permit traffic to %s", network)
+	displayData, err := createWtFwpmDisplayData0(displayName, "")
 	if err != nil {
 		return wrapErr(err)
 	}
@@ -151,7 +125,7 @@ func PermitNetwork(session uintptr, baseObjects *baseObjects, weight uint8, netw
 	filter := wtFwpmFilter0{
 		filterKey:           filterKey,
 		displayData:         *displayData,
-		flags:               cFWPM_FILTER_FLAG_CLEAR_ACTION_RIGHT, //Aggiunto il flag FWPM_FILTER_FLAG_CLEAR_ACTION_RIGHT per fare in modo che la regola sia un "hard permit" e quindi più difficile da sovrascrivere
+		flags:               cFWPM_FILTER_FLAG_CLEAR_ACTION_RIGHT, // Added FWPM_FILTER_FLAG_CLEAR_ACTION_RIGHT flag to make the rule an "hard permit" rule (complex to overwrite)
 		providerKey:         &baseObjects.provider,
 		layerKey:            cFWPM_LAYER_ALE_AUTH_CONNECT_V4,
 		subLayerKey:         baseObjects.filters,
@@ -163,7 +137,65 @@ func PermitNetwork(session uintptr, baseObjects *baseObjects, weight uint8, netw
 		},
 	}
 
-	fmt.Println(filterKey)
+	var filterID uint64
+	err = fwpmFilterAdd0(session, &filter, 0, &filterID)
+	if err != nil {
+		return wrapErr(err)
+	}
+
+	return nil
+}
+
+func BlockNetwork(session uintptr, baseObjects *baseObjects, weight uint8, network string) error {
+	ipNet, err := netip.ParsePrefix(network)
+	if err != nil {
+		return wrapErr(err)
+	}
+
+	// Convert the IP address and Mask to a 4-byte array
+	addr := ipNet.Addr().As4()
+	mask := net.CIDRMask(ipNet.Bits(), 32) // e.g.: 255.255.255.0 if ipNet.Bits() = 24
+
+	// Convert the IP address and Mask to UINT32
+	addrMask := struct {
+		addr uint32
+		mask uint32
+	}{
+		addr: binary.BigEndian.Uint32(addr[:]),
+		mask: binary.BigEndian.Uint32(mask),
+	}
+
+	conditions := make([]wtFwpmFilterCondition0, 1)
+	conditions[0].fieldKey = cFWPM_CONDITION_IP_REMOTE_ADDRESS
+	conditions[0].matchType = cFWP_MATCH_EQUAL
+	conditions[0].conditionValue._type = cFWP_V4_ADDR_MASK
+	conditions[0].conditionValue.value = uintptr(unsafe.Pointer(&addrMask))
+
+	filterKey, err := windows.GenerateGUID()
+	if err != nil {
+		return wrapErr(err)
+	}
+
+	displayName := fmt.Sprintf("Block traffic to %s", network)
+	displayData, err := createWtFwpmDisplayData0(displayName, "")
+	if err != nil {
+		return wrapErr(err)
+	}
+
+	filter := wtFwpmFilter0{
+		filterKey:           filterKey,
+		displayData:         *displayData,
+		flags:               cFWPM_FILTER_FLAG_CLEAR_ACTION_RIGHT, // Added FWPM_FILTER_FLAG_CLEAR_ACTION_RIGHT flag to make the rule an "hard permit" rule (complex to overwrite)
+		providerKey:         &baseObjects.provider,
+		layerKey:            cFWPM_LAYER_ALE_AUTH_CONNECT_V4,
+		subLayerKey:         baseObjects.filters,
+		weight:              filterWeight(weight),
+		numFilterConditions: uint32(len(conditions)),
+		filterCondition:     &conditions[0],
+		action: wtFwpmAction0{
+			_type: cFWP_ACTION_BLOCK,
+		},
+	}
 
 	var filterID uint64
 	err = fwpmFilterAdd0(session, &filter, 0, &filterID)
@@ -174,15 +206,15 @@ func PermitNetwork(session uintptr, baseObjects *baseObjects, weight uint8, netw
 	return nil
 }
 
-// Funzione helper per convertire la netmask in uint32
+/*
 func ipNetMaskToUint32(ipNet netip.Prefix) uint32 {
 	ones := ipNet.Bits()
 	if ones == 0 {
 		return 0
 	}
-	// Crea la maschera in network byte order
 	return binary.BigEndian.Uint32(net.CIDRMask(ones, 32))
 }
+*/
 
 func wrapErr(err error) error {
 	if err == nil {
@@ -198,13 +230,14 @@ func createWtFwpmDisplayData0(name, description string) (*wtFwpmDisplayData0, er
 	}, nil
 }
 
-// Funzione helper per controllare gli errori di Windows
+/*
 func checkWindowsError(err error) error {
 	if err != nil && err != windows.ERROR_SUCCESS {
 		return err
 	}
 	return nil
 }
+*/
 
 func filterWeight(weight uint8) wtFwpValue0 {
 	return wtFwpValue0{
