@@ -28,7 +28,7 @@ func main() {
 		log.Fatalf("Failed to register base objects: %v", err)
 	}
 
-	err = firewall.PermitNetwork(session, baseObjects, 10, "10.0.0.0/24")
+	err = firewall.PermitCIDR(session, baseObjects, 10, "10.0.0.116/32")
 	if err != nil {
 		log.Fatalf("Failed to add custom firewall rule: %v", err)
 	}
