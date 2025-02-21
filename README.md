@@ -1,7 +1,8 @@
-# Windows Filtering Platform Custom Implementation Guide
+# Dynamic WFP Filters Generator
 
 **ATTENTION: the project is currently immature and still allows for little management of possible applicable rules in WFP**
 
+Makes easy Permit/Block IPv4 CIDR in Windows Filtering Platform using low level systems calls. <br>
 This document describes a custom implementation of the Windows Filtering Platform (WFP), designed to provide fine-grained control over network traffic at the system level. The implementation enables precise management of network filtering rules while seamlessly integrating with existing network security solutions.
 
 ## System Overview
