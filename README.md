@@ -6,7 +6,6 @@
 <br>
 
 Custom implementation of the Windows Filtering Platform (WFP), designed to provide fine-grained control over network traffic at the system level. This tool allows managing network traffic rules using Windows Filtering Platform (WFP), it can permit or block traffic for a specified CIDR range.
-Makes easy Permit/Block IPv4 CIDR in Windows Filtering Platform using low level system calls. 
 
 ### Installation
 - Requires Go and Windows administrator privileges.
