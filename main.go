@@ -12,17 +12,17 @@ import (
 
 func main() {
 	// Define command line flags
-	permitFlag := flag.Bool("permit", false, "Permit traffic for specified CIDR")
-	blockFlag := flag.Bool("block", false, "Block traffic for specified CIDR")
+	permitFlag := flag.Bool("permit", false, "Permit traffic for specified CIDRs")
+	blockFlag := flag.Bool("block", false, "Block traffic for specified CIDRs")
 	flag.Parse()
 
-	// Check if CIDR is provided as argument
-	if flag.NArg() != 1 {
-		log.Fatal("Usage: program [-permit|-block] CIDR")
+	// Check if at least one CIDR is provided as argument
+	if flag.NArg() < 1 {
+		log.Fatal("Usage: program [-permit|-block] CIDR1 [CIDR2 CIDR3 ...]")
 	}
 
-	// Get CIDR from arguments
-	cidr := flag.Arg(0)
+	// Get CIDRs from arguments
+	cidrs := flag.Args()
 
 	// Check if exactly one flag is specified
 	if (*permitFlag && *blockFlag) || (!*permitFlag && !*blockFlag) {
@@ -46,27 +46,31 @@ func main() {
 		log.Fatalf("Failed to register base objects: %v", err)
 	}
 
-	// Apply the rule based on the flag
-	if *permitFlag {
-		err = firewall.PermitCIDR(session, baseObjects, 10, cidr)
-		if err != nil {
-			log.Fatalf("Failed to add permit rule: %v", err)
+	// Apply rules for each CIDR
+	for i, cidr := range cidrs {
+		// Use index as part of weight to ensure unique rules
+		weight := uint8(10 + i)
+
+		if *permitFlag {
+			err = firewall.PermitCIDR(session, baseObjects, weight, cidr)
+			if err != nil {
+				log.Fatalf("Failed to add permit rule for %s: %v", cidr, err)
+			}
+			fmt.Printf("Permit rule for %s successfully added\n", cidr)
+		} else {
+			err = firewall.BlockCIDR(session, baseObjects, weight, cidr)
+			if err != nil {
+				log.Fatalf("Failed to add block rule for %s: %v", cidr, err)
+			}
+			fmt.Printf("Block rule for %s successfully added\n", cidr)
 		}
-		fmt.Printf("Permit rule for %s successfully added\n", cidr)
-	} else {
-		err = firewall.BlockCIDR(session, baseObjects, 10, cidr)
-		if err != nil {
-			log.Fatalf("Failed to add block rule: %v", err)
-		}
-		fmt.Printf("Block rule for %s successfully added\n", cidr)
 	}
 
-	fmt.Println("Rule will remain active until termination signal is received")
+	fmt.Println("Rules will remain active until termination signal is received")
 
 	// Wait for termination signal
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-
 	fmt.Println("Waiting for termination signal...")
 	<-sigs
 	fmt.Println("Termination signal received.")
